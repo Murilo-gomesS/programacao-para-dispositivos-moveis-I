@@ -13,7 +13,7 @@
     "@react-navigation/bottom-tabs": "^7.15.9",
     "@react-navigation/native": "^7.2.2",
     "@react-navigation/native-stack": "^7.14.10",
-    "expo": "~54.0.33",
+    "expo": "~54.0.34",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-native": "0.81.5",
@@ -23,6 +23,12 @@
   "devDependencies": {
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.8.13",
+    "brace-expansion": "^5.0.6",
+    "postcss": "^8.5.10",
+    "ws": "^8.20.1"
   },
   "private": true
 }
