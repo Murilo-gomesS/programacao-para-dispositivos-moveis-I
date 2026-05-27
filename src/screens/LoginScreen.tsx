@@ -5,7 +5,7 @@ import { AppInput } from '../components/AppInput';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
 import { useFormFields } from '../hooks/useFormFields';
-import { fakeLogin } from '../services/authService';
+import { login as loginRequest } from '../services/api';
 import { theme } from '../styles/theme';
 
 type LoginErrors = {
@@ -31,6 +31,13 @@ export function LoginScreen() {
       nextErrors.emailOrLogin = 'Informe seu email ou login.';
     }
 
+    if (fields.emailOrLogin.includes('@')) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(fields.emailOrLogin)) {
+        nextErrors.emailOrLogin = 'Email invalido.';
+      }
+    }
+
     if (!fields.password.trim()) {
       nextErrors.password = 'Informe sua senha.';
     }
@@ -49,15 +56,14 @@ export function LoginScreen() {
     setIsLoading(true);
 
     try {
-      const authenticated = await fakeLogin(fields);
-
-      if (!authenticated) {
-        setAuthError('Credenciais invalidas. Use admin@email.com e senha 123.');
-        return;
-      }
-
-      Alert.alert('Sucesso', 'Login realizado com sucesso.');
-      login();
+      const response = await loginRequest({
+        email: fields.emailOrLogin,
+        senha: fields.password,
+      });
+      await login(response.token, response.usuario);
+      Alert.alert('Sucesso', `Seja bem vindo ${response.usuario.nome}!`);
+    } catch (error) {
+      setAuthError('Credenciais invalidas ou falha de rede.');
     } finally {
       setIsLoading(false);
     }

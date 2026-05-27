@@ -1,9 +1,17 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
+import { setAuthToken } from '../services/api';
 
 type AuthContextValue = {
   isAuthenticated: boolean;
-  login: () => void;
-  logout: () => void;
+  isLoading: boolean;
+  user: { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number } | null;
+  login: (
+    token: string,
+    user: { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number },
+  ) => Promise<void>;
+  updateUser: (user: { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number }) => Promise<void>;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -14,14 +22,84 @@ type AuthProviderProps = {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<
+    { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number } | null
+  >(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      try {
+        const token = await SecureStore.getItemAsync('auth_token');
+        const storedUser = await SecureStore.getItemAsync('auth_user');
+        if (isMounted && token) {
+          setAuthToken(token);
+          setIsAuthenticated(true);
+
+          if (storedUser) {
+            try {
+              setUser(JSON.parse(storedUser));
+            } catch {
+              setUser(null);
+            }
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const login = useCallback(
+    async (
+      token: string,
+      nextUser: { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number },
+    ) => {
+    await SecureStore.setItemAsync('auth_token', token);
+    await SecureStore.setItemAsync('auth_user', JSON.stringify(nextUser));
+    setAuthToken(token);
+    setIsAuthenticated(true);
+    setUser(nextUser);
+    },
+    [],
+  );
+
+  const updateUser = useCallback(
+    async (nextUser: { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number }) => {
+      await SecureStore.setItemAsync('auth_user', JSON.stringify(nextUser));
+      setUser(nextUser);
+    },
+    [],
+  );
+
+  const logout = useCallback(async () => {
+    await SecureStore.deleteItemAsync('auth_token');
+    await SecureStore.deleteItemAsync('auth_user');
+    setAuthToken();
+    setIsAuthenticated(false);
+    setUser(null);
+  }, []);
 
   const value = useMemo(
     () => ({
       isAuthenticated,
-      login: () => setIsAuthenticated(true),
-      logout: () => setIsAuthenticated(false),
+      isLoading,
+      user,
+      login,
+      updateUser,
+      logout,
     }),
-    [isAuthenticated],
+    [isAuthenticated, isLoading, user, login, updateUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

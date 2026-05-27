@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StyleSheet, Text, View } from 'react-native';
 import { DashboardCard } from '../components/DashboardCard';
 import { ScreenContainer } from '../components/ScreenContainer';
+import { useAuth } from '../context/AuthContext';
 import { MainTabParamList } from '../navigation/types';
 import { theme } from '../styles/theme';
 
@@ -10,6 +11,8 @@ type DashboardNavigationProp = BottomTabNavigationProp<MainTabParamList>;
 
 export function DashboardScreen() {
   const navigation = useNavigation<DashboardNavigationProp>();
+  const { user } = useAuth();
+  const isAdmin = user?.perfil === 'Administrador';
 
   return (
     <ScreenContainer>
@@ -18,21 +21,25 @@ export function DashboardScreen() {
         <Text style={styles.subtitle}>Selecione uma area para iniciar as operacoes academicas.</Text>
       </View>
 
-      <DashboardCard
-        title="Cadastro de Alunos"
-        description="Registre dados pessoais e academicos dos estudantes."
-        onPress={() => navigation.navigate('Alunos')}
-      />
-      <DashboardCard
-        title="Cadastro de Professores"
-        description="Gerencie o quadro docente com dados profissionais."
-        onPress={() => navigation.navigate('Professores')}
-      />
-      <DashboardCard
-        title="Cadastro de Disciplinas"
-        description="Associe disciplinas, carga horaria e semestre."
-        onPress={() => navigation.navigate('Disciplinas')}
-      />
+      {isAdmin ? (
+        <>
+          <DashboardCard
+            title="Cadastro de Alunos"
+            description="Registre dados pessoais e academicos dos estudantes."
+            onPress={() => navigation.navigate('Alunos')}
+          />
+          <DashboardCard
+            title="Cadastro de Professores"
+            description="Gerencie o quadro docente com dados profissionais."
+            onPress={() => navigation.navigate('Professores')}
+          />
+          <DashboardCard
+            title="Cadastro de Disciplinas"
+            description="Associe disciplinas, carga horaria e semestre."
+            onPress={() => navigation.navigate('Disciplinas')}
+          />
+        </>
+      ) : null}
       <DashboardCard
         title="Consulta de Boletim"
         description="Visualize desempenho, medias e situacao final."

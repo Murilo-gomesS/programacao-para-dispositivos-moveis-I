@@ -1,37 +1,85 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, Alert } from 'react-native';
+import { AppButton } from '../components/AppButton';
+import { AppInput } from '../components/AppInput';
 import { ScreenContainer } from '../components/ScreenContainer';
-import { ReportCardItem, reportCardMock } from '../services/mockData';
+import { useAuth } from '../context/AuthContext';
+import { fetchBoletim } from '../services/api';
 import { theme } from '../styles/theme';
 
+type ReportCardItem = {
+  nome: string;
+  nota1: number;
+  nota2: number;
+  media: number;
+  situacao: 'Aprovado' | 'Reprovado';
+};
+
 export function ReportCardScreen() {
+  const { user } = useAuth();
   const [records, setRecords] = useState<ReportCardItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [matricula, setMatricula] = useState(user?.matricula || '2024001');
+
+  const isAluno = user?.perfil === 'Aluno' && !!user?.matricula;
+
+  const handleMatriculaChange = (value: string) => {
+    if (isAluno) {
+      return;
+    }
+
+    setMatricula(value.replace(/\D/g, '').slice(0, 30));
+  };
 
   useEffect(() => {
-    // Simula carregamento inicial de dados vindo de uma API.
-    const timeout = setTimeout(() => {
-      setRecords(reportCardMock);
-      setIsLoading(false);
-    }, 800);
+    if (isAluno && user?.matricula) {
+      setMatricula(user.matricula);
+    }
+  }, [isAluno, user?.matricula]);
 
-    return () => clearTimeout(timeout);
-  }, []);
+  const handleFetch = async () => {
+    if (!matricula.trim()) {
+      Alert.alert('Atencao', 'Informe a matricula do aluno.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetchBoletim(matricula.trim());
+      setRecords(response.disciplinas || []);
+    } catch (error) {
+      Alert.alert('Erro', 'Nao foi possivel carregar o boletim.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <ScreenContainer>
       <Text style={styles.title}>Boletim Escolar</Text>
       <Text style={styles.subtitle}>Resumo de desempenho por disciplina.</Text>
 
+      <AppInput
+        label="Matricula"
+        placeholder="000000"
+        value={matricula}
+        keyboardType="numeric"
+        onChangeText={handleMatriculaChange}
+        editable={!isAluno}
+      />
+      <AppButton title="Buscar boletim" onPress={handleFetch} loading={isLoading} />
+
       {isLoading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Carregando boletim...</Text>
         </View>
+      ) : records.length === 0 ? (
+        <Text style={styles.emptyText}>Nenhuma disciplina encontrada.</Text>
       ) : (
         records.map((item) => (
-          <View key={item.disciplina} style={styles.recordCard}>
-            <Text style={styles.discipline}>{item.disciplina}</Text>
+          <View key={item.nome} style={styles.recordCard}>
+            <Text style={styles.discipline}>{item.nome}</Text>
             <Text style={styles.meta}>Nota 1: {item.nota1.toFixed(1)}</Text>
             <Text style={styles.meta}>Nota 2: {item.nota2.toFixed(1)}</Text>
             <Text style={styles.meta}>Media: {item.media.toFixed(2)}</Text>
@@ -68,6 +116,10 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: theme.spacing.sm,
     color: theme.colors.mutedText,
+  },
+  emptyText: {
+    color: theme.colors.mutedText,
+    marginTop: theme.spacing.lg,
   },
   recordCard: {
     backgroundColor: theme.colors.surface,
