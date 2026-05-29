@@ -4,9 +4,11 @@ Aplicativo mobile desenvolvido com Expo + React Native (TypeScript) e backend em
 
 ## Estado atual (resumo)
 - Login com JWT (Alunos, Professores, Administrador via variável de ambiente).
-- Tela de **Admin** com visualização dos dados e edição mínima (Alunos, Disciplinas, Notas).
+- Tela de **Admin** com visualização dos dados e edição de registros (Alunos, Professores, Disciplinas, Notas).
 - Tela de visualização adaptativa para **Professor** (ver suas disciplinas e alunos) e **Aluno** (ver seu boletim e dados).
 - Professores podem atualizar/inserir notas apenas nas suas disciplinas.
+- Cadastro de cursos em separado na tela de Disciplinas, com seleção visual de curso no cadastro.
+- Admin pode excluir alunos, professores e disciplinas diretamente na tela de dados.
 - Tabela `matriculas` adicionada para representar matrícula de aluno em disciplina.
 - Scripts para iniciar o Expo forçando o IP LAN (`scripts/expoStartLan.js`) para resolver problemas de conexão do Expo Go.
 
@@ -21,7 +23,7 @@ Aplicativo mobile desenvolvido com Expo + React Native (TypeScript) e backend em
 
 ## Funcionalidades principais
 - Autenticação (JWT) e middleware de autorização (`requireAdmin`, `requireProfessor`, `requireAluno`).
-- CRUD básico para `alunos`, `professores`, `disciplinas`, `notas` — admin pode criar/editar registros.
+- CRUD básico para `alunos`, `professores`, `disciplinas`, `notas` — admin pode criar/editar/excluir registros.
 - Visualização por papel: Admin / Professor / Aluno.
 - API documentada na prática com rotas em `backend/routes`.
 
@@ -51,8 +53,9 @@ npm run dev       # roda server (server.js)
 ```
 
 Observações:
-- Variáveis de ambiente em `backend/.env` (copie de `backend/.env.example`).
-- Em desenvolvimento é útil configurar `JWT_SECRET` e `ADMIN_PASSWORD_HASH`.
+- Variáveis de ambiente em `backend/.env` são locais e não devem ser commitadas. Copie de `backend/.env.example`.
+- Substitua todos os valores `CHANGE_ME` por segredos reais antes de executar em desenvolvimento ou produção.
+- Em desenvolvimento é útil configurar `JWT_SECRET`, `DB_PASSWORD` e `ADMIN_PASSWORD_HASH` com valores fortes.
 
 3) Frontend (Expo)
 
@@ -70,7 +73,7 @@ Scripts úteis (raiz): veja `package.json` e `scripts/expoStartLan.js`.
 
 Opções:
 
-- Pela UI (app): abra **Dados (Admin)** — há botões "Editar" para registros (Alunos, Disciplinas, Notas). A edição de `Professor` pode ser adicionada à UI se preferir (posso implementar).
+- Pela UI (app): abra **Dados (Admin)** — há botões "Editar" para registros (Alunos, Professores, Disciplinas, Notas).
 
 - Pela API (exemplo cURL):
 
@@ -106,6 +109,7 @@ Rotas importantes (backend):
 
 ## Notas de segurança / recomendações rápidas
 - Nunca commit secrets: remova `backend/.env` do repositório e use variáveis seguras (Vault / GitHub Secrets) — rotacione `JWT_SECRET` se já vazou.
+- Não reutilize a senha padrão do PostgreSQL (`postgres`) em ambientes compartilhados ou de produção.
 - Atualize dependências (ver `npm-audit-report.json`) e corrija vulnerabilidades (expo, uuid, etc.).
 - Defina limites de payload JSON: `app.use(express.json({ limit: '16kb' }))` no backend para reduzir risco de DoS.
 - Aplique rate-limiting também em rotas de criação/atualização sensíveis.

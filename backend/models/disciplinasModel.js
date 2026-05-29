@@ -32,4 +32,8 @@ async function create({ nome, carga_horaria, professor_id, curso, semestre }) {
   return rows[0];
 }
 
-module.exports = { create, findAllDetailed };
+async function deleteById(id) {
+  await pool.query('DELETE FROM disciplinas WHERE id = $1', [id]);
+}
+
+module.exports = { create, findAllDetailed, deleteById };

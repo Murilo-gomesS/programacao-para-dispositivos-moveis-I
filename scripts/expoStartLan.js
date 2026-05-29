@@ -6,33 +6,77 @@ function isPrivateIpv4(address) {
   if (address.startsWith('10.')) return true;
   if (address.startsWith('192.168.')) return true;
 
-  const m = address.match(/^172\.(\d+)\./);
-  if (m) {
-    const second = Number(m[1]);
+  const match = address.match(/^172\.(\d+)\./);
+  if (match) {
+    const second = Number(match[1]);
     return second >= 16 && second <= 31;
   }
 
   return false;
 }
 
+function isPreferredAdapterName(name) {
+  const normalized = String(name || '').toLowerCase();
+  return (
+    normalized.includes('ethernet') ||
+    normalized.includes('wi-fi') ||
+    normalized.includes('wifi') ||
+    normalized.includes('wireless')
+  );
+}
+
+function isExcludedAdapterName(name) {
+  const normalized = String(name || '').toLowerCase();
+  return (
+    normalized.includes('wsl') ||
+    normalized.includes('loopback') ||
+    normalized.includes('virtual') ||
+    normalized.includes('vmware') ||
+    normalized.includes('hyper-v') ||
+    normalized.includes('vethernet')
+  );
+}
+
 function pickLanIpv4() {
+  const explicitHost =
+    process.env.EXPO_HOST_IP ||
+    process.env.REACT_NATIVE_PACKAGER_HOSTNAME ||
+    process.env.EXPO_PACKAGER_HOSTNAME;
+
+  if (explicitHost && isPrivateIpv4(explicitHost)) {
+    return explicitHost;
+  }
+
   const nets = os.networkInterfaces();
   const candidates = [];
 
-  for (const name of Object.keys(nets)) {
-    const list = nets[name] || [];
+  for (const [name, list] of Object.entries(nets)) {
+    if (isExcludedAdapterName(name)) continue;
 
-    for (const net of list) {
+    for (const net of list || []) {
       if (!net) continue;
       if (net.family !== 'IPv4') continue;
       if (net.internal) continue;
 
-      candidates.push({ name, address: net.address });
+      candidates.push({
+        name,
+        address: net.address,
+        preferred: isPreferredAdapterName(name),
+        is192: net.address.startsWith('192.168.'),
+        is172: /^172\.(\d+)\./.test(net.address),
+      });
     }
   }
 
   const privateCandidates = candidates.filter((c) => isPrivateIpv4(c.address));
   if (privateCandidates.length > 0) {
+    privateCandidates.sort((a, b) => {
+      if (a.preferred !== b.preferred) return a.preferred ? -1 : 1;
+      if (a.is192 !== b.is192) return a.is192 ? -1 : 1;
+      if (a.is172 !== b.is172) return a.is172 ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+
     return privateCandidates[0].address;
   }
 
@@ -69,6 +113,7 @@ const host = pickLanIpv4();
 if (host) {
   process.env.REACT_NATIVE_PACKAGER_HOSTNAME = host;
   process.env.EXPO_PACKAGER_HOSTNAME = host;
+  process.env.EXPO_HOST_IP = host;
   console.log(`[expoStartLan] Host LAN detectado: ${host}`);
 } else {
   console.warn('[expoStartLan] Nao foi possivel detectar IP LAN; usando comportamento padrao do Expo.');

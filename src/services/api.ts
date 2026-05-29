@@ -54,16 +54,23 @@ export type LoginPayload = {
   senha: string;
 };
 
+export type CursoListItem = {
+  id: number;
+  nome: string;
+};
+
 export type AlunoPayload = {
   nome: string;
   matricula: string;
   curso: string;
+  semestre: number;
   email: string;
   telefone?: string;
   cep?: string;
   endereco?: string;
   cidade?: string;
   estado?: string;
+  disciplinaIds?: number[];
 };
 
 export async function login(payload: LoginPayload) {
@@ -73,6 +80,11 @@ export async function login(payload: LoginPayload) {
 
 export async function createAluno(payload: AlunoPayload) {
   const response = await api.post('/alunos', payload);
+  return response.data;
+}
+
+export async function deleteAlunoAdmin(id: number) {
+  const response = await api.delete(`/alunos/${id}`);
   return response.data;
 }
 
@@ -89,6 +101,11 @@ export async function createProfessor(payload: ProfessorPayload) {
   return response.data;
 }
 
+export async function deleteProfessorAdmin(id: number) {
+  const response = await api.delete(`/professores/${id}`);
+  return response.data;
+}
+
 export async function updateProfessorAdmin(id: number, payload: Partial<ProfessorPayload>) {
   const response = await api.put(`/professores/${id}`, payload);
   return response.data;
@@ -100,6 +117,10 @@ export type DisciplinaPayload = {
   professor_id: number;
   curso: string;
   semestre: number;
+};
+
+export type CursoPayload = {
+  nome: string;
 };
 
 export type ProfessorListItem = {
@@ -116,7 +137,27 @@ export async function createDisciplina(payload: DisciplinaPayload) {
   return response.data;
 }
 
+export async function deleteDisciplinaAdmin(id: number) {
+  const response = await api.delete(`/disciplinas/${id}`);
+  return response.data;
+}
+
+export async function fetchCursos() {
+  const response = await api.get<{ cursos: CursoListItem[] }>('/cursos');
+  return response.data;
+}
+
+export async function createCurso(payload: CursoPayload) {
+  const response = await api.post('/cursos', payload);
+  return response.data;
+}
+
 export async function fetchProfessores() {
+  const response = await api.get<{ professores: ProfessorListItem[] }>('/professores');
+  return response.data;
+}
+
+export async function fetchAdminProfessores() {
   const response = await api.get<{ professores: ProfessorListItem[] }>('/professores');
   return response.data;
 }
@@ -131,6 +172,7 @@ export type AdminAlunoListItem = {
   nome: string;
   matricula: string;
   curso: string;
+  semestre: number;
   email: string;
 };
 
@@ -244,6 +286,7 @@ export type AlunoPerfil = {
   nome: string;
   matricula: string;
   curso: string;
+  semestre: number;
   email: string;
   telefone: string | null;
   cep: string | null;
@@ -265,6 +308,7 @@ export type UpdateAlunoPerfilPayload = {
   endereco?: string | null;
   cidade?: string | null;
   estado?: string | null;
+  semestre?: number | null;
 };
 
 export async function updateMeuAlunoPerfil(payload: UpdateAlunoPerfilPayload) {

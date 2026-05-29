@@ -9,10 +9,10 @@ import { theme } from '../styles/theme';
 
 type ReportCardItem = {
   nome: string;
-  nota1: number;
-  nota2: number;
-  media: number;
-  situacao: 'Aprovado' | 'Reprovado';
+  nota1: number | null;
+  nota2: number | null;
+  media: number | null;
+  situacao: 'Aprovado' | 'Reprovado' | null;
 };
 
 export function ReportCardScreen() {
@@ -36,6 +36,38 @@ export function ReportCardScreen() {
       setMatricula(user.matricula);
     }
   }, [isAluno, user?.matricula]);
+
+  useEffect(() => {
+    if (!isAluno || !matricula.trim()) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadBoletim = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetchBoletim(matricula.trim());
+        if (isMounted) {
+          setRecords(response.disciplinas || []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          Alert.alert('Erro', 'Nao foi possivel carregar o boletim.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadBoletim();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAluno, matricula]);
 
   const handleFetch = async () => {
     if (!matricula.trim()) {
@@ -67,7 +99,7 @@ export function ReportCardScreen() {
         onChangeText={handleMatriculaChange}
         editable={!isAluno}
       />
-      <AppButton title="Buscar boletim" onPress={handleFetch} loading={isLoading} />
+      {!isAluno && <AppButton title="Buscar boletim" onPress={handleFetch} loading={isLoading} />}
 
       {isLoading ? (
         <View style={styles.loadingBox}>
@@ -80,16 +112,20 @@ export function ReportCardScreen() {
         records.map((item) => (
           <View key={item.nome} style={styles.recordCard}>
             <Text style={styles.discipline}>{item.nome}</Text>
-            <Text style={styles.meta}>Nota 1: {item.nota1.toFixed(1)}</Text>
-            <Text style={styles.meta}>Nota 2: {item.nota2.toFixed(1)}</Text>
-            <Text style={styles.meta}>Media: {item.media.toFixed(2)}</Text>
+            <Text style={styles.meta}>Nota 1: {item.nota1 === null ? 'N/A' : item.nota1.toFixed(1)}</Text>
+            <Text style={styles.meta}>Nota 2: {item.nota2 === null ? 'N/A' : item.nota2.toFixed(1)}</Text>
+            <Text style={styles.meta}>Media: {item.media === null ? 'N/A' : item.media.toFixed(2)}</Text>
             <Text
               style={[
                 styles.status,
-                item.situacao === 'Aprovado' ? styles.statusApproved : styles.statusFailed,
+                item.situacao === 'Aprovado'
+                  ? styles.statusApproved
+                  : item.situacao === 'Reprovado'
+                    ? styles.statusFailed
+                    : styles.statusNeutral,
               ]}
             >
-              {item.situacao}
+              {item.situacao || 'Sem nota'}
             </Text>
           </View>
         ))
@@ -148,5 +184,8 @@ const styles = StyleSheet.create({
   },
   statusFailed: {
     color: theme.colors.danger,
+  },
+  statusNeutral: {
+    color: theme.colors.mutedText,
   },
 });

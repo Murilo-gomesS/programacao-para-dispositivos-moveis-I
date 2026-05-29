@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppButton } from '../components/AppButton';
 import { AppInput } from '../components/AppInput';
 import { ScreenContainer } from '../components/ScreenContainer';
+import { useAuth } from '../context/AuthContext';
 import { useFormFields } from '../hooks/useFormFields';
-import { createAluno } from '../services/api';
+import { AdminDisciplinaListItem, createAluno, fetchAdminDisciplinas } from '../services/api';
 import {
   fetchCidadesIbge,
   fetchEnderecoByCep,
@@ -18,6 +19,7 @@ type StudentForm = {
   nome: string;
   matricula: string;
   curso: string;
+  semestre: string;
   email: string;
   telefone: string;
   cep: string;
@@ -59,10 +61,12 @@ function formatPhone(value: string) {
 }
 
 export function StudentRegistrationScreen() {
+  const { bumpAdminDataRevision } = useAuth();
   const { fields, updateField, resetFields } = useFormFields<StudentForm>({
     nome: '',
     matricula: '',
     curso: '',
+    semestre: '',
     email: '',
     telefone: '',
     cep: '',
@@ -77,6 +81,15 @@ export function StudentRegistrationScreen() {
   const [estados, setEstados] = useState<IbgeEstado[]>([]);
   const [cidades, setCidades] = useState<IbgeCidade[]>([]);
   const [isCidadeLoading, setIsCidadeLoading] = useState(false);
+  const [disciplinas, setDisciplinas] = useState<AdminDisciplinaListItem[]>([]);
+  const [isDisciplinasLoading, setIsDisciplinasLoading] = useState(false);
+  const [disciplinasError, setDisciplinasError] = useState<string | null>(null);
+  const [selectedDisciplineIds, setSelectedDisciplineIds] = useState<number[]>([]);
+
+  const cursosDisponiveis = useMemo(
+    () => Array.from(new Set(disciplinas.map((disciplina) => disciplina.curso).filter(Boolean))).sort(),
+    [disciplinas],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -99,6 +112,59 @@ export function StudentRegistrationScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDisciplinas = async () => {
+      try {
+        setIsDisciplinasLoading(true);
+        setDisciplinasError(null);
+        const data = await fetchAdminDisciplinas();
+        if (isMounted) {
+          setDisciplinas(data.disciplinas || []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setDisciplinasError('Nao foi possivel carregar as disciplinas.');
+          setDisciplinas([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsDisciplinasLoading(false);
+        }
+      }
+    };
+
+    loadDisciplinas();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const disciplinasElegiveis = useMemo(() => {
+    const curso = fields.curso.trim().toLowerCase();
+    const semestre = Number(fields.semestre);
+
+    if (!curso || !Number.isInteger(semestre) || semestre <= 0) {
+      return [];
+    }
+
+    return disciplinas.filter(
+      (disciplina) => disciplina.curso.trim().toLowerCase() === curso && disciplina.semestre === semestre,
+    );
+  }, [disciplinas, fields.curso, fields.semestre]);
+
+  useEffect(() => {
+    setSelectedDisciplineIds(disciplinasElegiveis.map((disciplina) => disciplina.id));
+  }, [disciplinasElegiveis]);
+
+  useEffect(() => {
+    if (fields.curso && !cursosDisponiveis.includes(fields.curso)) {
+      updateField('curso', '');
+    }
+  }, [cursosDisponiveis, fields.curso, updateField]);
+
   const validate = () => {
     const nextErrors: Partial<Record<keyof StudentForm, string>> = {};
 
@@ -116,6 +182,11 @@ export function StudentRegistrationScreen() {
     const matriculaDigits = onlyDigits(fields.matricula);
     if (matriculaDigits.length < 3) {
       nextErrors.matricula = 'Matricula invalida.';
+    }
+
+    const semestre = Number(fields.semestre);
+    if (!Number.isInteger(semestre) || semestre <= 0) {
+      nextErrors.semestre = 'Semestre invalido.';
     }
 
     const cepDigits = onlyDigits(fields.cep);
@@ -188,19 +259,35 @@ export function StudentRegistrationScreen() {
       return;
     }
 
+    if (disciplinasElegiveis.length === 0) {
+      setErrors((current) => ({
+        ...current,
+        semestre: 'Nenhuma disciplina encontrada para este curso e semestre.',
+      }));
+      return;
+    }
+
+    if (selectedDisciplineIds.length === 0) {
+      setErrors((current) => ({ ...current, semestre: 'Selecione pelo menos uma disciplina.' }));
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await createAluno({
         nome: fields.nome,
         matricula: onlyDigits(fields.matricula),
         curso: fields.curso,
+        semestre: Number(fields.semestre),
         email: fields.email,
         telefone: onlyDigits(fields.telefone),
         cep: onlyDigits(fields.cep),
         endereco: fields.endereco,
         cidade: fields.cidade,
         estado: fields.estado.trim().toUpperCase(),
+        disciplinaIds: selectedDisciplineIds,
       });
+      bumpAdminDataRevision();
       Alert.alert('Aluno cadastrado', `Dados enviados com sucesso.\n${fields.nome} (${fields.matricula})`);
       resetFields();
     } catch (error) {
@@ -245,12 +332,48 @@ export function StudentRegistrationScreen() {
           onChangeText={(value) => updateField('matricula', onlyDigits(value).slice(0, 30))}
           error={errors.matricula}
         />
+        <SectionTitle title="Curso" subtitle="Selecione um curso já cadastrado." />
+        {isDisciplinasLoading ? (
+          <Text style={styles.helperText}>Carregando cursos...</Text>
+        ) : cursosDisponiveis.length === 0 ? (
+          <Text style={styles.helperText}>Nenhum curso encontrado.</Text>
+        ) : (
+          <View style={styles.disciplinaList}>
+            {cursosDisponiveis.map((curso) => {
+              const isSelected = fields.curso === curso;
+
+              return (
+                <Pressable
+                  key={curso}
+                  onPress={() => updateField('curso', curso)}
+                  style={({ pressed }) => [
+                    styles.disciplinaItem,
+                    isSelected && styles.disciplinaItemSelected,
+                    pressed && styles.disciplinaItemPressed,
+                  ]}
+                >
+                  <View style={styles.disciplinaTextBlock}>
+                    <Text style={styles.disciplinaTitle}>{curso}</Text>
+                    <Text style={styles.disciplinaMeta}>Curso disponivel para matricula</Text>
+                  </View>
+                  <Text style={[styles.disciplinaCheck, isSelected && styles.disciplinaCheckSelected]}>
+                    {isSelected ? 'Selecionado' : 'Selecionar'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {!!errors.curso && <Text style={styles.errorInline}>{errors.curso}</Text>}
+
         <AppInput
-          label="Curso"
-          placeholder="Ex: Engenharia de Software"
-          value={fields.curso}
-          onChangeText={(value) => updateField('curso', value)}
-          error={errors.curso}
+          label="Semestre"
+          placeholder="Ex: 1"
+          keyboardType="numeric"
+          value={fields.semestre}
+          onChangeText={(value) => updateField('semestre', onlyDigits(value).slice(0, 2))}
+          error={errors.semestre}
         />
         <AppInput
           label="Email"
@@ -316,6 +439,59 @@ export function StudentRegistrationScreen() {
         </View>
 
         {isCidadeLoading && <Text style={styles.helperText}>Carregando cidades...</Text>}
+
+        <SectionTitle
+          title="Disciplinas do semestre"
+          subtitle={
+            disciplinasElegiveis.length > 0
+              ? 'As disciplinas abaixo foram filtradas pelo curso e semestre informados.'
+              : 'Selecione o curso e preencha o semestre para ver as disciplinas correspondentes.'
+          }
+        />
+
+        {isDisciplinasLoading ? (
+          <Text style={styles.helperText}>Carregando disciplinas...</Text>
+        ) : disciplinasError ? (
+          <Text style={styles.errorInline}>{disciplinasError}</Text>
+        ) : disciplinasElegiveis.length === 0 ? (
+          <Text style={styles.helperText}>Nenhuma disciplina encontrada para este curso e semestre.</Text>
+        ) : (
+          <View style={styles.disciplinaList}>
+            {disciplinasElegiveis.map((disciplina) => {
+              const isSelected = selectedDisciplineIds.includes(disciplina.id);
+
+              return (
+                <Pressable
+                  key={disciplina.id}
+                  onPress={() => {
+                    setSelectedDisciplineIds((current) =>
+                      current.includes(disciplina.id)
+                        ? current.filter((id) => id !== disciplina.id)
+                        : [...current, disciplina.id],
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.disciplinaItem,
+                    isSelected && styles.disciplinaItemSelected,
+                    pressed && styles.disciplinaItemPressed,
+                  ]}
+                >
+                  <View style={styles.disciplinaTextBlock}>
+                    <Text style={styles.disciplinaTitle}>{disciplina.nome}</Text>
+                    <Text style={styles.disciplinaMeta}>
+                      {disciplina.curso} · Semestre {disciplina.semestre}
+                    </Text>
+                  </View>
+                  <Text style={[styles.disciplinaCheck, isSelected && styles.disciplinaCheckSelected]}>
+                    {isSelected ? 'Selecionada' : 'Selecionar'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        <Text style={styles.helperText}>Selecionadas: {selectedDisciplineIds.length} disciplina(s).</Text>
 
         <AppButton title="Salvar cadastro" onPress={handleSubmit} loading={isSubmitting} />
       </View>
@@ -396,6 +572,51 @@ const styles = StyleSheet.create({
   helperText: {
     color: theme.colors.mutedText,
     marginBottom: theme.spacing.md,
+  },
+  errorInline: {
+    color: theme.colors.danger,
+    marginBottom: theme.spacing.md,
+  },
+  disciplinaList: {
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  disciplinaItem: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  disciplinaItemSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: '#eef5ff',
+  },
+  disciplinaItemPressed: {
+    opacity: 0.85,
+  },
+  disciplinaTextBlock: {
+    flex: 1,
+    paddingRight: theme.spacing.sm,
+  },
+  disciplinaTitle: {
+    color: theme.colors.text,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  disciplinaMeta: {
+    color: theme.colors.mutedText,
+    fontSize: 12,
+  },
+  disciplinaCheck: {
+    color: theme.colors.mutedText,
+    fontWeight: '700',
+  },
+  disciplinaCheckSelected: {
+    color: theme.colors.primary,
   },
   row: {
     flexDirection: 'row',

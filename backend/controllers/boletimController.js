@@ -49,6 +49,20 @@ async function listNotas(req, res) {
   }
 }
 
+function computeNotaSummary(nota1, nota2, mediaValue) {
+  const hasNotas = Number.isFinite(nota1) && Number.isFinite(nota2);
+  const media = Number.isFinite(mediaValue)
+    ? Number(mediaValue)
+    : hasNotas
+      ? Number(((nota1 + nota2) / 2).toFixed(2))
+      : null;
+
+  return {
+    media,
+    situacao: media === null ? null : media >= 6 ? 'Aprovado' : 'Reprovado',
+  };
+}
+
 async function upsertNotaProfessor(req, res) {
   try {
     const professorId = req.user?.professor_id;
@@ -194,9 +208,9 @@ async function getBoletimByMatricula(req, res) {
 
       const query = `
         SELECT 1
-        FROM notas n
-        INNER JOIN disciplinas d ON d.id = n.disciplina_id
-        INNER JOIN alunos a ON a.id = n.aluno_id
+        FROM matriculas m
+        INNER JOIN disciplinas d ON d.id = m.disciplina_id
+        INNER JOIN alunos a ON a.id = m.aluno_id
         WHERE d.professor_id = $1
           AND a.matricula = $2
         LIMIT 1;
@@ -213,13 +227,30 @@ async function getBoletimByMatricula(req, res) {
       return res.status(403).json({ message: 'Acesso negado.' });
     }
 
-    const boletim = await boletimModel.findByMatricula(matricula);
+    const boletim = await boletimModel.findByMatricula(
+      matricula,
+      req.user?.perfil === 'Professor' ? req.user?.professor_id : null,
+    );
 
     if (!boletim) {
       return res.status(404).json({ message: 'Aluno nao encontrado.' });
     }
 
-    return res.json(boletim);
+    const disciplinas = boletim.disciplinas.map((disciplina) => {
+      const nota1 = disciplina.nota1 === null ? null : Number(disciplina.nota1);
+      const nota2 = disciplina.nota2 === null ? null : Number(disciplina.nota2);
+      const summary = computeNotaSummary(nota1, nota2, disciplina.media);
+
+      return {
+        ...disciplina,
+        nota1,
+        nota2,
+        media: summary.media,
+        situacao: disciplina.situacao || summary.situacao,
+      };
+    });
+
+    return res.json({ ...boletim, disciplinas });
   } catch (error) {
     logServerError(req, 'Erro ao buscar boletim.', error);
     return res.status(500).json({ message: 'Erro ao buscar boletim.' });

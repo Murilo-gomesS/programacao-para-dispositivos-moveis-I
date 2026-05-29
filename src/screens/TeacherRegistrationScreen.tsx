@@ -3,6 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { AppButton } from '../components/AppButton';
 import { AppInput } from '../components/AppInput';
 import { ScreenContainer } from '../components/ScreenContainer';
+import { useAuth } from '../context/AuthContext';
 import { useFormFields } from '../hooks/useFormFields';
 import { createProfessor } from '../services/api';
 import { theme } from '../styles/theme';
@@ -16,6 +17,7 @@ type TeacherForm = {
 };
 
 export function TeacherRegistrationScreen() {
+  const { bumpAdminDataRevision } = useAuth();
   const { fields, updateField, resetFields } = useFormFields<TeacherForm>({
     nome: '',
     titulacao: '',
@@ -64,6 +66,7 @@ export function TeacherRegistrationScreen() {
         tempo_docencia: Number(fields.tempoDocencia),
         email: fields.email,
       });
+      bumpAdminDataRevision();
       Alert.alert('Professor cadastrado', `${fields.nome} foi registrado com sucesso.`);
       resetFields();
     } catch (error) {

@@ -24,6 +24,7 @@ async function login(req, res) {
     const senhaValue = String(senha).trim();
 
     const jwtSecret = process.env.JWT_SECRET;
+    const jwtTtl = process.env.JWT_TTL_HOURS || '8';
 
     if (!jwtSecret) {
       return res.status(500).json({ message: 'JWT_SECRET nao configurado.' });
@@ -55,7 +56,7 @@ async function login(req, res) {
           professor_id: usuarioDb.professor_id,
         },
         jwtSecret,
-        { expiresIn: '8h' },
+        { expiresIn: `${jwtTtl}h` },
       );
 
       return res.json({
@@ -94,7 +95,7 @@ async function login(req, res) {
     const token = jwt.sign(
       { sub: 'env-admin', nome: defaultUser.nome, perfil: defaultUser.perfil },
       jwtSecret,
-      { expiresIn: '8h' },
+      { expiresIn: `${jwtTtl}h` },
     );
 
     return res.json({

@@ -5,6 +5,7 @@ const usuariosRoutes = require('./usuariosRoutes');
 const alunosRoutes = require('./alunosRoutes');
 const professoresRoutes = require('./professoresRoutes');
 const disciplinasRoutes = require('./disciplinasRoutes');
+const cursosRoutes = require('./cursosRoutes');
 const boletimRoutes = require('./boletimRoutes');
 const visualizacaoRoutes = require('./visualizacaoRoutes');
 
@@ -15,6 +16,7 @@ routes.use(usuariosRoutes);
 routes.use(alunosRoutes);
 routes.use(professoresRoutes);
 routes.use(disciplinasRoutes);
+routes.use(cursosRoutes);
 routes.use(boletimRoutes);
 routes.use(visualizacaoRoutes);
 

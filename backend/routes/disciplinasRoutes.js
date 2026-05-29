@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { createDisciplina, listDisciplinas } = require('../controllers/disciplinasController');
+const { createDisciplina, listDisciplinas, updateDisciplinaById, deleteDisciplinaById } = require('../controllers/disciplinasController');
 const { authMiddleware, requireAdmin } = require('../middleware/authMiddleware');
 
 const routes = Router();
@@ -7,8 +7,7 @@ const routes = Router();
 routes.post('/disciplinas', authMiddleware, requireAdmin, createDisciplina);
 routes.get('/disciplinas', authMiddleware, requireAdmin, listDisciplinas);
 
-// Admin: atualizar disciplina por id
-const { updateDisciplinaById } = require('../controllers/disciplinasController');
 routes.put('/disciplinas/:id', authMiddleware, requireAdmin, updateDisciplinaById);
+routes.delete('/disciplinas/:id', authMiddleware, requireAdmin, deleteDisciplinaById);
 
 module.exports = routes;

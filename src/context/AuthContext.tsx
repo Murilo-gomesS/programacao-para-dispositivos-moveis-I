@@ -11,6 +11,8 @@ type AuthContextValue = {
     user: { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number },
   ) => Promise<void>;
   updateUser: (user: { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number }) => Promise<void>;
+  adminDataRevision: number;
+  bumpAdminDataRevision: () => void;
   logout: () => Promise<void>;
 };
 
@@ -23,6 +25,7 @@ type AuthProviderProps = {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [adminDataRevision, setAdminDataRevision] = useState(0);
   const [user, setUser] = useState<
     { nome: string; perfil: string; matricula?: string; alunoId?: number; professorId?: number } | null
   >(null);
@@ -82,6 +85,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [],
   );
 
+  const bumpAdminDataRevision = useCallback(() => {
+    setAdminDataRevision((current) => current + 1);
+  }, []);
+
   const logout = useCallback(async () => {
     await SecureStore.deleteItemAsync('auth_token');
     await SecureStore.deleteItemAsync('auth_user');
@@ -97,9 +104,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       user,
       login,
       updateUser,
+      adminDataRevision,
+      bumpAdminDataRevision,
       logout,
     }),
-    [isAuthenticated, isLoading, user, login, updateUser, logout],
+    [isAuthenticated, isLoading, user, login, updateUser, adminDataRevision, bumpAdminDataRevision, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

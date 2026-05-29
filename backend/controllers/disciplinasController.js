@@ -2,6 +2,11 @@ const { pool } = require('../database/connection');
 const disciplinasModel = require('../models/disciplinasModel');
 const { logServerError } = require('../utils/errorUtils');
 
+async function cursoExiste(curso) {
+  const { rowCount } = await pool.query('SELECT 1 FROM cursos WHERE nome = $1', [curso]);
+  return rowCount > 0;
+}
+
 async function listDisciplinas(req, res) {
   try {
     const disciplinas = await disciplinasModel.findAllDetailed();
@@ -34,6 +39,11 @@ async function createDisciplina(req, res) {
 
     if (!Number.isInteger(Number(semestre))) {
       return res.status(400).json({ message: 'Semestre deve ser um numero inteiro.' });
+    }
+
+    const cursoNormalizado = String(curso).trim();
+    if (!(await cursoExiste(cursoNormalizado))) {
+      return res.status(400).json({ message: 'Curso invalido.' });
     }
 
     const { rowCount } = await pool.query('SELECT 1 FROM professores WHERE id = $1', [
@@ -85,7 +95,11 @@ async function updateDisciplinaById(req, res) {
       return res.status(400).json({ message: 'Semestre deve ser um numero inteiro.' });
     }
 
-    const { pool } = require('../database/connection');
+    const cursoNormalizado = String(curso).trim();
+    if (!(await cursoExiste(cursoNormalizado))) {
+      return res.status(400).json({ message: 'Curso invalido.' });
+    }
+
     const { rowCount } = await pool.query('SELECT 1 FROM professores WHERE id = $1', [professor_id]);
 
     if (rowCount === 0) {
@@ -103,7 +117,7 @@ async function updateDisciplinaById(req, res) {
       RETURNING *;
     `;
 
-    const values = [String(nome).trim(), Number(carga_horaria), String(curso).trim(), Number(semestre), Number(professor_id), Number(id)];
+    const values = [String(nome).trim(), Number(carga_horaria), cursoNormalizado, Number(semestre), Number(professor_id), Number(id)];
 
     const { rows } = await pool.query(query, values);
     const disciplina = rows[0];
@@ -124,4 +138,37 @@ async function updateDisciplinaById(req, res) {
   }
 }
 
-module.exports = { createDisciplina, listDisciplinas, updateDisciplinaById };
+async function deleteDisciplinaById(req, res) {
+  const client = await pool.connect();
+
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Id da disciplina e obrigatorio.' });
+    }
+
+    const disciplinaId = Number(id);
+    await client.query('BEGIN');
+
+    const { rowCount } = await client.query('SELECT 1 FROM disciplinas WHERE id = $1', [disciplinaId]);
+    if (rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Disciplina nao encontrada.' });
+    }
+
+    await client.query('DELETE FROM notas WHERE disciplina_id = $1', [disciplinaId]);
+    await client.query('DELETE FROM matriculas WHERE disciplina_id = $1', [disciplinaId]);
+    await client.query('DELETE FROM disciplinas WHERE id = $1', [disciplinaId]);
+
+    await client.query('COMMIT');
+    return res.json({ message: 'Disciplina removida com sucesso.' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logServerError(req, 'Erro ao remover disciplina.', error);
+    return res.status(500).json({ message: 'Erro ao remover disciplina.' });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { createDisciplina, listDisciplinas, updateDisciplinaById, deleteDisciplinaById };

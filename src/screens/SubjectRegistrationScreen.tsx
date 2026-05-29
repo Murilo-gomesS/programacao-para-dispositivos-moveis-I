@@ -3,8 +3,18 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppButton } from '../components/AppButton';
 import { AppInput } from '../components/AppInput';
 import { ScreenContainer } from '../components/ScreenContainer';
+import { useAuth } from '../context/AuthContext';
 import { useFormFields } from '../hooks/useFormFields';
-import { createDisciplina, fetchProfessores, ProfessorListItem } from '../services/api';
+import {
+  AdminDisciplinaListItem,
+  createCurso,
+  createDisciplina,
+  fetchAdminDisciplinas,
+  fetchCursos,
+  fetchProfessores,
+  CursoListItem,
+  ProfessorListItem,
+} from '../services/api';
 import { theme } from '../styles/theme';
 
 type SubjectForm = {
@@ -16,6 +26,7 @@ type SubjectForm = {
 };
 
 export function SubjectRegistrationScreen() {
+  const { bumpAdminDataRevision } = useAuth();
   const { fields, updateField, resetFields } = useFormFields<SubjectForm>({
     nomeDisciplina: '',
     cargaHoraria: '',
@@ -30,9 +41,45 @@ export function SubjectRegistrationScreen() {
   const [isProfessoresLoading, setIsProfessoresLoading] = useState(false);
   const [professoresError, setProfessoresError] = useState<string | null>(null);
   const [professorSearch, setProfessorSearch] = useState('');
+  const [cursos, setCursos] = useState<CursoListItem[]>([]);
+  const [disciplinas, setDisciplinas] = useState<AdminDisciplinaListItem[]>([]);
+  const [isCursosLoading, setIsCursosLoading] = useState(false);
+  const [novoCurso, setNovoCurso] = useState('');
+  const [isCursoSubmitting, setIsCursoSubmitting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+
+    const loadCursos = async () => {
+      try {
+        setIsCursosLoading(true);
+        const data = await fetchCursos();
+        if (isMounted) {
+          setCursos(data.cursos || []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setCursos([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsCursosLoading(false);
+        }
+      }
+    };
+
+    const loadDisciplinas = async () => {
+      try {
+        const data = await fetchAdminDisciplinas();
+        if (isMounted) {
+          setDisciplinas(data.disciplinas || []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setDisciplinas([]);
+        }
+      }
+    };
 
     const loadProfessores = async () => {
       try {
@@ -54,6 +101,8 @@ export function SubjectRegistrationScreen() {
       }
     };
 
+    loadCursos();
+    loadDisciplinas();
     loadProfessores();
 
     return () => {
@@ -77,6 +126,18 @@ export function SubjectRegistrationScreen() {
     }
     return professores.find((p) => p.id === id) || null;
   }, [fields.professorId, professores]);
+
+  const selectedCurso = useMemo(() => {
+    const current = fields.curso.trim().toLowerCase();
+    return cursos.find((curso) => curso.nome.trim().toLowerCase() === current) || null;
+  }, [cursos, fields.curso]);
+
+  const cursosDisponiveis = useMemo(() => {
+    const fromCatalog = cursos.map((curso) => curso.nome).filter(Boolean);
+    const fromDisciplinas = disciplinas.map((disciplina) => disciplina.curso).filter(Boolean);
+
+    return Array.from(new Set([...fromCatalog, ...fromDisciplinas])).sort();
+  }, [cursos, disciplinas]);
 
   const validate = () => {
     const nextErrors: Partial<Record<keyof SubjectForm, string>> = {};
@@ -120,12 +181,41 @@ export function SubjectRegistrationScreen() {
         curso: fields.curso,
         semestre: Number(fields.semestre),
       });
+      bumpAdminDataRevision();
       Alert.alert('Disciplina cadastrada', `${fields.nomeDisciplina} foi registrada.`);
       resetFields();
     } catch (error) {
       Alert.alert('Erro', 'Nao foi possivel salvar o cadastro da disciplina.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateCurso = async () => {
+    const nome = novoCurso.trim();
+    if (!nome) {
+      Alert.alert('Atencao', 'Informe o nome do curso.');
+      return;
+    }
+
+    try {
+      setIsCursoSubmitting(true);
+      const curso = await createCurso({ nome });
+      setCursos((current) => {
+        if (current.some((item) => item.nome.toLowerCase() === curso.curso.nome.toLowerCase())) {
+          return current;
+        }
+
+        return [...current, curso.curso].sort((a, b) => a.nome.localeCompare(b.nome));
+      });
+      updateField('curso', curso.curso.nome);
+      setNovoCurso('');
+      Alert.alert('Curso cadastrado', `${curso.curso.nome} foi adicionado ao catalogo.`);
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Nao foi possivel cadastrar o curso.';
+      Alert.alert('Erro', String(message));
+    } finally {
+      setIsCursoSubmitting(false);
     }
   };
 
@@ -149,18 +239,48 @@ export function SubjectRegistrationScreen() {
         onChangeText={(value) => updateField('cargaHoraria', value)}
         error={errors.cargaHoraria}
       />
-      <AppInput
-        label="ID do professor"
-        placeholder="Selecione abaixo ou digite"
-        keyboardType="numeric"
-        value={fields.professorId}
-        onChangeText={(value) => updateField('professorId', value)}
-        error={errors.professorId}
-      />
-
       {!!selectedProfessor && (
         <Text style={styles.helperText}>Selecionado: {selectedProfessor.nome}</Text>
       )}
+
+      <Text style={styles.sectionLabel}>Cadastro de curso</Text>
+      <AppInput
+        label="Novo curso"
+        placeholder="Ex: Sistemas de Informacao"
+        value={novoCurso}
+        onChangeText={setNovoCurso}
+      />
+      <AppButton title="Cadastrar curso" onPress={handleCreateCurso} loading={isCursoSubmitting} variant="secondary" />
+
+      <Text style={styles.sectionLabel}>Curso da disciplina</Text>
+      {isCursosLoading ? (
+        <Text style={styles.helperText}>Carregando cursos...</Text>
+      ) : cursosDisponiveis.length === 0 ? (
+        <Text style={styles.helperText}>Cadastre um curso acima para selecionar aqui.</Text>
+      ) : (
+        <View style={styles.listBox}>
+          {cursosDisponiveis.map((curso) => {
+            const isSelected = fields.curso === curso;
+
+            return (
+              <Pressable
+                key={curso}
+                onPress={() => updateField('curso', curso)}
+                style={({ pressed }) => [
+                  styles.listItem,
+                  isSelected && styles.listItemSelected,
+                  pressed && styles.listItemPressed,
+                ]}
+              >
+                <Text style={styles.listItemTitle}>{curso}</Text>
+                <Text style={styles.listItemMeta}>{isSelected ? 'Selecionado' : 'Toque para selecionar'}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {!!selectedCurso && <Text style={styles.helperText}>Curso escolhido: {selectedCurso.nome}</Text>}
 
       <AppInput
         label="Buscar professor"
@@ -199,13 +319,10 @@ export function SubjectRegistrationScreen() {
           })}
         </View>
       )}
-      <AppInput
-        label="Curso"
-        placeholder="Ex: Sistemas de Informacao"
-        value={fields.curso}
-        onChangeText={(value) => updateField('curso', value)}
-        error={errors.curso}
-      />
+
+      {!!errors.professorId && <Text style={styles.errorInline}>{errors.professorId}</Text>}
+
+      {!!errors.curso && <Text style={styles.errorInline}>{errors.curso}</Text>}
       <AppInput
         label="Semestre"
         placeholder="Ex: 1"
@@ -234,6 +351,12 @@ const styles = StyleSheet.create({
   helperText: {
     color: theme.colors.mutedText,
     marginBottom: theme.spacing.md,
+  },
+  sectionLabel: {
+    color: theme.colors.text,
+    fontWeight: '800',
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   errorInline: {
     color: theme.colors.danger,

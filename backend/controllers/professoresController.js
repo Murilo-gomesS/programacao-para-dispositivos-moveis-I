@@ -1,4 +1,5 @@
 const professoresModel = require('../models/professoresModel');
+const { pool } = require('../database/connection');
 const { logServerError } = require('../utils/errorUtils');
 
 async function listProfessores(req, res) {
@@ -72,33 +73,16 @@ async function updateProfessorById(req, res) {
 
     const values = [String(nome).trim(), String(titulacao).trim(), String(area).trim(), Number(tempo_docencia), String(email).trim(), Number(id)];
 
-    const { rows } = await professoresModel.pool ? await professoresModel.pool.query(query, values) : await professoresModel.create({});
+    const { rows } = await pool.query(query, values);
+    const professor = rows[0];
 
-    // Simples fallback direto usando pool se professoresModel nao expor pool
-    const updated = rows ? rows[0] : null;
-
-    if (!updated) {
-      // usar pool direto
-      const { pool } = require('../database/connection');
-      const r = await pool.query(query, values);
-      const prof = r.rows[0];
-      if (!prof) return res.status(404).json({ message: 'Professor nao encontrado.' });
-
-      // atualizar usuario caso exista
-      await pool.query('UPDATE usuarios SET nome = $1, email = $2 WHERE professor_id = $3', [prof.nome, prof.email, prof.id]);
-
-      return res.json({ message: 'Professor atualizado com sucesso.', professor: prof });
+    if (!professor) {
+      return res.status(404).json({ message: 'Professor nao encontrado.' });
     }
 
-    // atualizar usuario caso exista
-    try {
-      const { pool } = require('../database/connection');
-      await pool.query('UPDATE usuarios SET nome = $1, email = $2 WHERE professor_id = $3', [updated.nome, updated.email, updated.id]);
-    } catch (e) {
-      // ignore
-    }
+    await pool.query('UPDATE usuarios SET nome = $1, email = $2 WHERE professor_id = $3', [professor.nome, professor.email, professor.id]);
 
-    return res.json({ message: 'Professor atualizado com sucesso.', professor: updated });
+    return res.json({ message: 'Professor atualizado com sucesso.', professor });
   } catch (error) {
     if (error && error.code === '23505') {
       return res.status(409).json({ message: 'Email ja cadastrado.' });
@@ -108,4 +92,45 @@ async function updateProfessorById(req, res) {
   }
 }
 
-module.exports = { createProfessor, listProfessores, updateProfessorById };
+async function deleteProfessorById(req, res) {
+  const client = await pool.connect();
+
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Id do professor e obrigatorio.' });
+    }
+
+    const professorId = Number(id);
+    await client.query('BEGIN');
+
+    const { rowCount } = await client.query('SELECT 1 FROM professores WHERE id = $1', [professorId]);
+    if (rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Professor nao encontrado.' });
+    }
+
+    const { rows: disciplinas } = await client.query('SELECT id FROM disciplinas WHERE professor_id = $1', [professorId]);
+    const disciplinaIds = disciplinas.map((row) => row.id);
+
+    if (disciplinaIds.length > 0) {
+      await client.query('DELETE FROM notas WHERE disciplina_id = ANY($1::int[])', [disciplinaIds]);
+      await client.query('DELETE FROM matriculas WHERE disciplina_id = ANY($1::int[])', [disciplinaIds]);
+      await client.query('DELETE FROM disciplinas WHERE id = ANY($1::int[])', [disciplinaIds]);
+    }
+
+    await client.query('DELETE FROM usuarios WHERE professor_id = $1', [professorId]);
+    await client.query('DELETE FROM professores WHERE id = $1', [professorId]);
+
+    await client.query('COMMIT');
+    return res.json({ message: 'Professor removido com sucesso.' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logServerError(req, 'Erro ao remover professor.', error);
+    return res.status(500).json({ message: 'Erro ao remover professor.' });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { createProfessor, listProfessores, updateProfessorById, deleteProfessorById };

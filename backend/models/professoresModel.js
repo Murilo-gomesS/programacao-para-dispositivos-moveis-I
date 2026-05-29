@@ -24,4 +24,8 @@ async function create({ nome, titulacao, area, tempo_docencia, email }) {
   return rows[0];
 }
 
-module.exports = { create, findAll, findAllPublic };
+async function deleteById(id) {
+  await pool.query('DELETE FROM professores WHERE id = $1', [id]);
+}
+
+module.exports = { create, findAll, findAllPublic, deleteById };

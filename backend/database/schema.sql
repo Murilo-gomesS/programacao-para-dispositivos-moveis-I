@@ -1,3 +1,8 @@
+CREATE TABLE IF NOT EXISTS cursos (
+  id SERIAL PRIMARY KEY,
+  nome VARCHAR(120) NOT NULL UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS alunos (
   id SERIAL PRIMARY KEY,
   nome VARCHAR(120) NOT NULL,
@@ -10,6 +15,9 @@ CREATE TABLE IF NOT EXISTS alunos (
   cidade VARCHAR(80),
   estado VARCHAR(2)
 );
+
+ALTER TABLE alunos
+  ADD COLUMN IF NOT EXISTS semestre INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS professores (
   id SERIAL PRIMARY KEY,
@@ -83,6 +91,7 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_matriculas_aluno_id ON matriculas(aluno_id);
 CREATE INDEX IF NOT EXISTS idx_matriculas_disciplina_id ON matriculas(disciplina_id);
+CREATE INDEX IF NOT EXISTS idx_disciplinas_professor_id ON disciplinas(professor_id);
 
 CREATE TABLE IF NOT EXISTS notas (
   id SERIAL PRIMARY KEY,
@@ -124,3 +133,4 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_notas_aluno_id ON notas(aluno_id);
 CREATE INDEX IF NOT EXISTS idx_notas_disciplina_id ON notas(disciplina_id);
+CREATE INDEX IF NOT EXISTS idx_alunos_matricula ON alunos(matricula);
